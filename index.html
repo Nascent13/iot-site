@@ -117,11 +117,18 @@ async function checkDoorbell() {
 }
 
 function showDoorbell(value, createdAt, flash) {
-  // ===== YOUR TURN =====
-  // Right now this just prints the raw value ("A"). Turn it into a real message:
-  //   "A" -> "Someone is at the door!"   "B" -> ...   "C" -> ...
-  // =====================
-  let message = "Button " + value + " was pressed";
+  // Turn the raw value from the Arduino into a real sentence.
+  const messages = {
+    "A": "Someone is at the door!",
+    "B": "Package delivered",
+    "C": "Go away"
+  };
+
+  // Clean up the value (removes spaces/newlines and makes "a" work like "A")
+  const key = String(value).trim().toUpperCase();
+
+  // Use the sentence if we know this value, otherwise show the raw value
+  let message = messages[key] || ("Unknown signal: " + value);
 
   document.getElementById("doorbellStatus").textContent = message;
   document.getElementById("doorbellTime").textContent = "at " + new Date(createdAt).toLocaleTimeString();
@@ -134,7 +141,6 @@ function showDoorbell(value, createdAt, flash) {
     card.classList.add("flash");
   }
 }
-
 /* =====================================================================
    PROJECT B - write to the lamp feed when a button is clicked
    ===================================================================== */
