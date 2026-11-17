@@ -124,11 +124,21 @@ function showDoorbell(value, createdAt, flash) {
     "C": "Go away"
   };
 
+  // Background color for each button
+  const colors = {
+    "A": "#2a2",   // green
+    "B": "#36c",   // blue
+    "C": "#d33"    // red
+  };
+
   // Clean up the value (removes spaces/newlines and makes "a" work like "A")
   const key = String(value).trim().toUpperCase();
 
   // Use the sentence if we know this value, otherwise show the raw value
   let message = messages[key] || ("Unknown signal: " + value);
+
+  // Change the page background (gray if the value is unknown)
+  document.body.style.background = colors[key] || "#f5f5f5";
 
   document.getElementById("doorbellStatus").textContent = message;
   document.getElementById("doorbellTime").textContent = "at " + new Date(createdAt).toLocaleTimeString();
