@@ -40,6 +40,8 @@
   <div class="status" id="doorbellStatus">Waiting for the Arduino...</div>
   <div class="small" id="doorbellTime"></div>
   <div class="small">Presses since this page opened: <span id="doorbellCount">0</span></div>
+  <button class="green" id="letInBtn" onclick="letThemIn()" style="display:none;">Let them in</button>
+  <div class="small" id="doorReply"></div>
 </div>
 
 <!-- ================= PROJECT B : Website -> Arduino ================= -->
@@ -138,7 +140,7 @@ async function checkDoorbell() {
 function showDoorbell(value, createdAt, flash) {
   // Turn the raw value from the Arduino into a real sentence.
   const messages = {
-    "A": "Someone is at the door!",
+    "A": "Someone's at the door!",
     "B": "Package delivered",
     "C": "Go away"
   };
@@ -162,6 +164,10 @@ function showDoorbell(value, createdAt, flash) {
   document.getElementById("doorbellStatus").textContent = message;
   document.getElementById("doorbellTime").textContent = "at " + new Date(createdAt).toLocaleTimeString();
   document.getElementById("doorbellCount").textContent = count;
+
+  // Show "Let them in" only when someone is at the door (button A)
+  document.getElementById("letInBtn").style.display = (key === "A") ? "inline-block" : "none";
+  if (key === "A") document.getElementById("doorReply").textContent = "";
 
   if (flash) {
     const card = document.getElementById("cardA");
@@ -189,6 +195,16 @@ async function sendLamp(value) {
   } catch (err) {
     status.textContent = "Could not send: " + err.message;
   }
+}
+
+/* =====================================================================
+   THE CONVERSATION - reply to the doorbell.
+   Sends "letin" on the lamp feed; the Arduino turns green and chimes.
+   ===================================================================== */
+async function letThemIn() {
+  await sendLamp("letin");
+  document.getElementById("letInBtn").style.display = "none";
+  document.getElementById("doorReply").textContent = "You let them in at " + new Date().toLocaleTimeString() + ".";
 }
 
 /* =====================================================================
