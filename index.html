@@ -12,13 +12,21 @@
   .status { font-size: 1.6rem; font-weight: bold; margin: 8px 0; }
   .small { color: #666; font-size: .9rem; }
   button { font-size: 1rem; padding: 10px 18px; margin: 4px; border: 0; border-radius: 8px; cursor: pointer; color: #fff; }
-  .red   { background: #d33; }
-  .green { background: #2a2; }
-  .blue  { background: #36c; }
-  .off   { background: #555; }
+  .red    { background: #d33; }
+  .green  { background: #2a2; }
+  .blue   { background: #36c; }
+  .off    { background: #555; }
+  .orange { background: #e80; }
   .flash { animation: flash .6s; }
   @keyframes flash { from { background: #ffe66d; } to { background: #fff; } }
   #errors { color: #b00; white-space: pre-wrap; }
+
+  /* RGB slider area */
+  .slider-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .slider-row label { width: 50px; font-weight: bold; }
+  .slider-row input { flex: 1; }
+  .slider-row span  { width: 36px; text-align: right; }
+  #swatch { width: 100%; height: 40px; border-radius: 8px; border: 1px solid #ccc; margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -37,9 +45,19 @@
 <!-- ================= PROJECT B : Website -> Arduino ================= -->
 <div class="card">
   <h2>Remote Lamp</h2>
-  <button class="red"   onclick="sendLamp('red')">Red</button>
-  <button class="off"   onclick="sendLamp('off')">Off</button>
-  <!-- YOUR TURN: add Green, Blue, and a Buzzer button. -->
+  <button class="red"    onclick="sendLamp('red')">Red</button>
+  <button class="green"  onclick="sendLamp('green')">Green</button>
+  <button class="blue"   onclick="sendLamp('blue')">Blue</button>
+  <button class="off"    onclick="sendLamp('off')">Off</button>
+  <button class="orange" onclick="sendLamp('buzz')">Buzzer</button>
+
+  <h3>Custom color</h3>
+  <div class="slider-row"><label for="r">Red</label>  <input type="range" id="r" min="0" max="255" value="128"><span id="rVal">128</span></div>
+  <div class="slider-row"><label for="g">Green</label><input type="range" id="g" min="0" max="255" value="0">  <span id="gVal">0</span></div>
+  <div class="slider-row"><label for="b">Blue</label> <input type="range" id="b" min="0" max="255" value="255"><span id="bVal">255</span></div>
+  <div id="swatch"></div>
+  <button class="blue" onclick="sendCustomColor()">Send this color</button>
+
   <div class="small" id="lampStatus"></div>
 </div>
 
@@ -50,12 +68,12 @@
 
 <script>
 /* =====================================================================
-   SETTINGS - change these two lines
+   SETTINGS - change these lines if your names are different
    ===================================================================== */
 const IO_USERNAME   = "crubbylovesardy";   // <-- your Adafruit IO username
-const DOORBELL_FEED = "doorbell";                     // Project A feed (Arduino -> web)
-const LAMP_FEED     = "lamp";                         // Project B feed (web -> Arduino)
-const POLL_MS       = 2000;                           // how often to check the doorbell feed (ms). Keep >= 2000.
+const DOORBELL_FEED = "doorbell";          // Project A feed (Arduino -> web)
+const LAMP_FEED     = "lamp";              // Project B feed (web -> Arduino)
+const POLL_MS       = 3000;                // how often to check the doorbell feed (ms). Keep >= 2000.
 
 /* =====================================================================
    YOUR KEY IS NOT IN THIS FILE ON PURPOSE.
@@ -98,8 +116,9 @@ async function checkDoorbell() {
     const res = await fetch(BASE + DOORBELL_FEED + "/data/last", {
       headers: { "X-AIO-Key": IO_KEY }
     });
-    if (res.status === 404) { showError("Feed '" + DOORBELL_FEED + "' not found. Did you create it on io.adafruit.com?"); return; }
+    if (res.status === 404) { showError("Feed '" + DOORBELL_FEED + "' not found (or it has no data yet). Did you create it on io.adafruit.com?"); return; }
     if (res.status === 401) { showError("401: wrong username or key. Click 'change key'."); return; }
+    if (res.status === 429) { showError("429: rate limit hit. Try a bigger POLL_MS."); return; }
     if (!res.ok) { showError("Adafruit IO replied " + res.status); return; }
 
     const data = await res.json();       // { id, value, created_at, ... }
@@ -135,7 +154,7 @@ function showDoorbell(value, createdAt, flash) {
   const key = String(value).trim().toUpperCase();
 
   // Use the sentence if we know this value, otherwise show the raw value
-  let message = messages[key] || ("Unknown signal: " + value);
+  const message = messages[key] || ("Unknown signal: " + value);
 
   // Change the page background (gray if the value is unknown)
   document.body.style.background = colors[key] || "#f5f5f5";
@@ -151,6 +170,7 @@ function showDoorbell(value, createdAt, flash) {
     card.classList.add("flash");
   }
 }
+
 /* =====================================================================
    PROJECT B - write to the lamp feed when a button is clicked
    ===================================================================== */
@@ -169,6 +189,32 @@ async function sendLamp(value) {
   } catch (err) {
     status.textContent = "Could not send: " + err.message;
   }
+}
+
+/* =====================================================================
+   RGB SLIDERS - moving a slider only changes the preview box.
+   The color is sent to the Arduino when you click "Send this color".
+   (Sending on every slider wiggle would hit the 30-per-minute limit.)
+   ===================================================================== */
+const rSlider = document.getElementById("r");
+const gSlider = document.getElementById("g");
+const bSlider = document.getElementById("b");
+
+function updateSwatch() {
+  const r = rSlider.value, g = gSlider.value, b = bSlider.value;
+  document.getElementById("rVal").textContent = r;
+  document.getElementById("gVal").textContent = g;
+  document.getElementById("bVal").textContent = b;
+  document.getElementById("swatch").style.background = `rgb(${r},${g},${b})`;
+}
+rSlider.oninput = updateSwatch;
+gSlider.oninput = updateSwatch;
+bSlider.oninput = updateSwatch;
+updateSwatch();
+
+function sendCustomColor() {
+  // Sends something like "255,0,128" - the Arduino splits it into r, g, b.
+  sendLamp(rSlider.value + "," + gSlider.value + "," + bSlider.value);
 }
 
 /* ---------- start ---------- */
