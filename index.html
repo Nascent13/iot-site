@@ -3,238 +3,461 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My IoT Page</title>
+<title>Arduino Tetris</title>
 <style>
   /* ---------- YOU CAN CHANGE ALL OF THIS ---------- */
-  body { font-family: Arial, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; background: #f5f5f5; color: #222; }
-  h1   { margin-bottom: 4px; }
-  .card { background: #fff; border-radius: 12px; padding: 20px; margin: 16px 0; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
-  .status { font-size: 1.6rem; font-weight: bold; margin: 8px 0; }
-  .small { color: #666; font-size: .9rem; }
-  button { font-size: 1rem; padding: 10px 18px; margin: 4px; border: 0; border-radius: 8px; cursor: pointer; color: #fff; }
-  .red    { background: #d33; }
-  .green  { background: #2a2; }
-  .blue   { background: #36c; }
-  .off    { background: #555; }
-  .orange { background: #e80; }
-  .flash { animation: flash .6s; }
-  @keyframes flash { from { background: #ffe66d; } to { background: #fff; } }
-  #errors { color: #b00; white-space: pre-wrap; }
+  :root {
+    --bg: #0f0f1a;
+    --panel: #1b1b2e;
+    --text: #eaeaf5;
+    --muted: #8a8aa8;
+    --accent: #4fd1ff;
+    --good: #3ddc84;
+    --bad: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font-family: "Courier New", monospace; }
+  h1 { text-align: center; letter-spacing: 6px; margin: 8px 0 4px; color: var(--accent); }
+  .sub { text-align: center; color: var(--muted); margin: 0 0 16px; font-size: .9rem; }
 
-  /* RGB slider area */
-  .slider-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
-  .slider-row label { width: 50px; font-weight: bold; }
-  .slider-row input { flex: 1; }
-  .slider-row span  { width: 36px; text-align: right; }
-  #swatch { width: 100%; height: 40px; border-radius: 8px; border: 1px solid #ccc; margin: 8px 0; }
+  .connect-bar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; margin-bottom: 16px; }
+  button { font-family: inherit; font-size: 1rem; padding: 10px 18px; border: 0; border-radius: 8px; cursor: pointer; background: var(--accent); color: #000; font-weight: bold; }
+  button:disabled { opacity: .5; cursor: default; }
+  #connStatus { color: var(--muted); }
+  #connStatus.ok { color: var(--good); }
+  #connStatus.err { color: var(--bad); }
+
+  .game { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; align-items: flex-start; }
+  #board { background: #000; border: 3px solid var(--accent); border-radius: 6px; width: 300px; max-width: 100%; height: auto; display: block; }
+
+  .side { display: flex; flex-direction: column; gap: 14px; width: 200px; }
+  .box { background: var(--panel); border-radius: 10px; padding: 12px 14px; }
+  .box h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); letter-spacing: 2px; }
+  .big { font-size: 1.6rem; font-weight: bold; }
+  #next { display: block; margin: 0 auto; }
+  .controls { font-size: .8rem; line-height: 1.6; color: var(--muted); }
+  .controls b { color: var(--text); }
+  #lastInput { font-size: .8rem; color: var(--muted); }
 </style>
 </head>
 <body>
 
-<h1>My IoT Page</h1>
-<p class="small">Adafruit IO user: <span id="whoami">?</span> &nbsp;|&nbsp; <a href="#" id="changeKey">change key</a></p>
+<h1>TETRIS</h1>
+<p class="sub">Controlled by your Arduino</p>
 
-<!-- ================= PROJECT A : Arduino -> Website ================= -->
-<div class="card" id="cardA">
-  <h2>Doorbell</h2>
-  <div class="status" id="doorbellStatus">Waiting for the Arduino...</div>
-  <div class="small" id="doorbellTime"></div>
-  <div class="small">Presses since this page opened: <span id="doorbellCount">0</span></div>
-  <button class="green" id="letInBtn" onclick="letThemIn()" style="display:none;">Let them in</button>
-  <div class="small" id="doorReply"></div>
+<div class="connect-bar">
+  <button id="connectBtn">Connect Arduino</button>
+  <button id="startBtn">Start Game</button>
+  <span id="connStatus">Not connected</span>
 </div>
 
-<!-- ================= PROJECT B : Website -> Arduino ================= -->
-<div class="card">
-  <h2>Remote Lamp</h2>
-  <button class="red"    onclick="sendLamp('red')">Red</button>
-  <button class="green"  onclick="sendLamp('green')">Green</button>
-  <button class="blue"   onclick="sendLamp('blue')">Blue</button>
-  <button class="off"    onclick="sendLamp('off')">Off</button>
-  <button class="orange" onclick="sendLamp('buzz')">Buzzer</button>
+<div class="game">
+  <canvas id="board" width="300" height="600"></canvas>
 
-  <h3>Custom color</h3>
-  <div class="slider-row"><label for="r">Red</label>  <input type="range" id="r" min="0" max="255" value="128"><span id="rVal">128</span></div>
-  <div class="slider-row"><label for="g">Green</label><input type="range" id="g" min="0" max="255" value="0">  <span id="gVal">0</span></div>
-  <div class="slider-row"><label for="b">Blue</label> <input type="range" id="b" min="0" max="255" value="255"><span id="bVal">255</span></div>
-  <div id="swatch"></div>
-  <button class="blue" onclick="sendCustomColor()">Send this color</button>
-
-  <div class="small" id="lampStatus"></div>
-</div>
-
-<div class="card">
-  <h3>Problems?</h3>
-  <div id="errors" class="small">None yet.</div>
+  <div class="side">
+    <div class="box">
+      <h3>NEXT</h3>
+      <canvas id="next" width="120" height="90"></canvas>
+    </div>
+    <div class="box"><h3>SCORE</h3><div class="big" id="score">0</div></div>
+    <div class="box"><h3>LINES</h3><div class="big" id="lines">0</div></div>
+    <div class="box"><h3>LEVEL</h3><div class="big" id="level">1</div></div>
+    <div class="box"><h3>BEST</h3><div class="big" id="best">0</div></div>
+    <div class="box controls">
+      <h3>CONTROLS</h3>
+      <b>Knob turn</b> rotate<br>
+      <b>Knob press</b> drop / start<br>
+      <b>A</b> left &nbsp; <b>C</b> right<br>
+      <b>B</b> down<br>
+      <br>
+      Keyboard: ← → ↓, ↑ rotate,<br>Space drop, Enter start
+    </div>
+    <div id="lastInput">Last from Arduino: -</div>
+  </div>
 </div>
 
 <script>
 /* =====================================================================
-   SETTINGS - change these lines if your names are different
+   GAME SETTINGS
    ===================================================================== */
-const IO_USERNAME   = "crubbylovesardy";   // <-- your Adafruit IO username
-const DOORBELL_FEED = "doorbell";          // Project A feed (Arduino -> web)
-const LAMP_FEED     = "lamp";              // Project B feed (web -> Arduino)
-const POLL_MS       = 3000;                // how often to check the doorbell feed (ms). Keep >= 2000.
+const COLS = 10;
+const ROWS = 20;
+const SIZE = 30;          // pixels per block
 
-/* =====================================================================
-   YOUR KEY IS NOT IN THIS FILE ON PURPOSE.
-   This page is public on GitHub. Anyone can read this code. So the page
-   asks you for your key once and remembers it in THIS browser only.
-   ===================================================================== */
-function getKey() {
-  let key = null;
-  try { key = localStorage.getItem("aio_key"); } catch (e) {}
-  if (!key) {
-    key = prompt("Paste your Adafruit IO key (starts with aio_). It stays in this browser only.");
-    if (key) { try { localStorage.setItem("aio_key", key.trim()); } catch (e) {} }
-  }
-  return key ? key.trim() : "";
-}
-document.getElementById("changeKey").onclick = (e) => {
-  e.preventDefault();
-  try { localStorage.removeItem("aio_key"); } catch (e2) {}
-  location.reload();
+const PIECES = {
+  I: { color: "#4fd1ff", shape: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] },
+  O: { color: "#ffd84f", shape: [[1,1],[1,1]] },
+  T: { color: "#b36bff", shape: [[0,1,0],[1,1,1],[0,0,0]] },
+  S: { color: "#3ddc84", shape: [[0,1,1],[1,1,0],[0,0,0]] },
+  Z: { color: "#ff5c5c", shape: [[1,1,0],[0,1,1],[0,0,0]] },
+  J: { color: "#4f7dff", shape: [[1,0,0],[1,1,1],[0,0,0]] },
+  L: { color: "#ff9f40", shape: [[0,0,1],[1,1,1],[0,0,0]] }
 };
 
-const IO_KEY = getKey();
-document.getElementById("whoami").textContent = IO_USERNAME;
-
-const BASE = `https://io.adafruit.com/api/v2/${IO_USERNAME}/feeds/`;
-
-function showError(msg) {
-  document.getElementById("errors").textContent = msg;
-  console.error(msg);
-}
+const LINE_POINTS = [0, 100, 300, 500, 800];   // points for 0-4 rows (times level)
 
 /* =====================================================================
-   PROJECT A - read the doorbell feed every POLL_MS milliseconds
+   GAME STATE
    ===================================================================== */
-let lastSeenId = null;   // id of the newest data point we have already shown
-let count = 0;
+const boardCanvas = document.getElementById("board");
+const ctx = boardCanvas.getContext("2d");
+const nextCtx = document.getElementById("next").getContext("2d");
 
-async function checkDoorbell() {
-  try {
-    const res = await fetch(BASE + DOORBELL_FEED + "/data/last", {
-      headers: { "X-AIO-Key": IO_KEY }
-    });
-    if (res.status === 404) { showError("Feed '" + DOORBELL_FEED + "' not found (or it has no data yet). Did you create it on io.adafruit.com?"); return; }
-    if (res.status === 401) { showError("401: wrong username or key. Click 'change key'."); return; }
-    if (res.status === 429) { showError("429: rate limit hit. Try a bigger POLL_MS."); return; }
-    if (!res.ok) { showError("Adafruit IO replied " + res.status); return; }
+let board, piece, nextPiece, bag;
+let score, lines, level;
+let state = "ready";       // "ready", "playing", "over"
+let dropTimer = 0;
+let lastTime = 0;
+let best = 0;
+try { best = Number(localStorage.getItem("tetris_best")) || 0; } catch (e) {}
+document.getElementById("best").textContent = best;
 
-    const data = await res.json();       // { id, value, created_at, ... }
+function emptyBoard() {
+  return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
 
-    if (data.id !== lastSeenId) {        // something NEW happened on the Arduino
-      const isFirstLoad = (lastSeenId === null);
-      lastSeenId = data.id;
-      if (!isFirstLoad) count++;
-      showDoorbell(data.value, data.created_at, !isFirstLoad);
+// "7-bag": every 7 pieces you get one of each, so no long droughts
+function takeFromBag() {
+  if (!bag || bag.length === 0) {
+    bag = Object.keys(PIECES);
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
     }
-    document.getElementById("errors").textContent = "None. Connected.";
-  } catch (err) {
-    showError("Could not reach Adafruit IO: " + err.message);
   }
+  const type = bag.pop();
+  return { type, color: PIECES[type].color, shape: PIECES[type].shape.map(r => r.slice()) };
 }
 
-function showDoorbell(value, createdAt, flash) {
-  // Turn the raw value from the Arduino into a real sentence.
-  const messages = {
-    "A": "Someone's at the door!",
-    "B": "Package delivered",
-    "C": "Go away"
-  };
+function spawn() {
+  piece = nextPiece || takeFromBag();
+  nextPiece = takeFromBag();
+  piece.x = Math.floor((COLS - piece.shape[0].length) / 2);
+  piece.y = piece.type === "I" ? -1 : 0;
+  if (collides(piece.shape, piece.x, piece.y)) gameOver();
+  drawNext();
+}
 
-  // Background color for each button
-  const colors = {
-    "A": "#2a2",   // green
-    "B": "#36c",   // blue
-    "C": "#d33"    // red
-  };
-
-  // Clean up the value (removes spaces/newlines and makes "a" work like "A")
-  const key = String(value).trim().toUpperCase();
-
-  // Use the sentence if we know this value, otherwise show the raw value
-  const message = messages[key] || ("Unknown signal: " + value);
-
-  // Change the page background (gray if the value is unknown)
-  document.body.style.background = colors[key] || "#f5f5f5";
-
-  document.getElementById("doorbellStatus").textContent = message;
-  document.getElementById("doorbellTime").textContent = "at " + new Date(createdAt).toLocaleTimeString();
-  document.getElementById("doorbellCount").textContent = count;
-
-  // Show "Let them in" only when someone is at the door (button A)
-  document.getElementById("letInBtn").style.display = (key === "A") ? "inline-block" : "none";
-  if (key === "A") document.getElementById("doorReply").textContent = "";
-
-  if (flash) {
-    const card = document.getElementById("cardA");
-    card.classList.remove("flash");
-    void card.offsetWidth;               // restart the animation
-    card.classList.add("flash");
-  }
+function startGame() {
+  board = emptyBoard();
+  bag = [];
+  nextPiece = null;
+  score = 0; lines = 0; level = 1;
+  dropTimer = 0;
+  state = "playing";
+  updateStats();
+  spawn();
+  sendToArduino("S");
 }
 
 /* =====================================================================
-   PROJECT B - write to the lamp feed when a button is clicked
+   MOVEMENT
    ===================================================================== */
-async function sendLamp(value) {
-  const status = document.getElementById("lampStatus");
-  status.textContent = "Sending '" + value + "'...";
+function collides(shape, x, y) {
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (!shape[r][c]) continue;
+      const nx = x + c, ny = y + r;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function move(dx) {
+  if (state !== "playing") return;
+  if (!collides(piece.shape, piece.x + dx, piece.y)) piece.x += dx;
+}
+
+function softDrop() {
+  if (state !== "playing") return;
+  if (!collides(piece.shape, piece.x, piece.y + 1)) {
+    piece.y++;
+    score += 1;
+    updateStats();
+  } else {
+    lockPiece();
+  }
+  dropTimer = 0;
+}
+
+function hardDrop() {
+  if (state !== "playing") return;
+  let rows = 0;
+  while (!collides(piece.shape, piece.x, piece.y + 1)) { piece.y++; rows++; }
+  score += rows * 2;
+  lockPiece();
+}
+
+function rotateCW(m)  { return m[0].map((_, i) => m.map(row => row[i]).reverse()); }
+function rotateCCW(m) { return m[0].map((_, i) => m.map(row => row[row.length - 1 - i])); }
+
+function rotate(dir) {
+  if (state !== "playing" || piece.type === "O") return;
+  const turned = dir > 0 ? rotateCW(piece.shape) : rotateCCW(piece.shape);
+  // "wall kicks": if it doesn't fit, try nudging it sideways
+  for (const kick of [0, -1, 1, -2, 2]) {
+    if (!collides(turned, piece.x + kick, piece.y)) {
+      piece.shape = turned;
+      piece.x += kick;
+      return;
+    }
+  }
+}
+
+function lockPiece() {
+  let aboveTop = false;
+  piece.shape.forEach((row, r) => row.forEach((v, c) => {
+    if (!v) return;
+    const y = piece.y + r;
+    if (y < 0) aboveTop = true;
+    else board[y][piece.x + c] = piece.color;
+  }));
+  if (aboveTop) { gameOver(); return; }
+
+  clearRows();
+  spawn();
+}
+
+function clearRows() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell)) {
+      board.splice(r, 1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++;
+      r++;   // check the same row again (everything moved down)
+    }
+  }
+  if (cleared > 0) {
+    score += LINE_POINTS[cleared] * level;
+    lines += cleared;
+    level = Math.floor(lines / 10) + 1;
+    updateStats();
+    sendToArduino("W" + cleared);          // happy sound!
+  }
+}
+
+function gameOver() {
+  if (state === "over") return;
+  state = "over";
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem("tetris_best", best); } catch (e) {}
+    document.getElementById("best").textContent = best;
+  }
+  sendToArduino("X");                      // sad sound
+}
+
+function dropInterval() {
+  return Math.max(90, 800 - (level - 1) * 70);   // faster every level
+}
+
+/* =====================================================================
+   DRAWING
+   ===================================================================== */
+function drawCell(c, x, y, color, size, alpha = 1) {
+  c.globalAlpha = alpha;
+  c.fillStyle = color;
+  c.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+  c.fillStyle = "rgba(255,255,255,.25)";
+  c.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  c.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+
+  // faint grid
+  ctx.strokeStyle = "rgba(255,255,255,.05)";
+  for (let x = 0; x <= COLS; x++) { ctx.beginPath(); ctx.moveTo(x * SIZE, 0); ctx.lineTo(x * SIZE, ROWS * SIZE); ctx.stroke(); }
+  for (let y = 0; y <= ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * SIZE); ctx.lineTo(COLS * SIZE, y * SIZE); ctx.stroke(); }
+
+  if (board) {
+    board.forEach((row, y) => row.forEach((color, x) => { if (color) drawCell(ctx, x, y, color, SIZE); }));
+  }
+
+  if (piece && state === "playing") {
+    // ghost piece: shows where it will land
+    let gy = piece.y;
+    while (!collides(piece.shape, piece.x, gy + 1)) gy++;
+    piece.shape.forEach((row, r) => row.forEach((v, c) => {
+      if (v && gy + r >= 0) drawCell(ctx, piece.x + c, gy + r, piece.color, SIZE, 0.2);
+    }));
+    // the real piece
+    piece.shape.forEach((row, r) => row.forEach((v, c) => {
+      if (v && piece.y + r >= 0) drawCell(ctx, piece.x + c, piece.y + r, piece.color, SIZE);
+    }));
+  }
+
+  if (state === "ready") overlay("TETRIS", "Press the knob, Enter,", "or Start Game");
+  if (state === "over")  overlay("GAME OVER", "Score: " + score, "Press the knob to play again");
+}
+
+function overlay(title, line1, line2) {
+  ctx.fillStyle = "rgba(0,0,0,.7)";
+  ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#4fd1ff";
+  ctx.font = "bold 34px Courier New";
+  ctx.fillText(title, boardCanvas.width / 2, 260);
+  ctx.fillStyle = "#eaeaf5";
+  ctx.font = "16px Courier New";
+  ctx.fillText(line1, boardCanvas.width / 2, 300);
+  ctx.fillText(line2, boardCanvas.width / 2, 325);
+}
+
+function drawNext() {
+  nextCtx.clearRect(0, 0, 120, 90);
+  if (!nextPiece) return;
+  const s = 22;
+  const shape = nextPiece.shape.filter(row => row.some(v => v));   // drop empty rows
+  const w = shape[0].length * s, h = shape.length * s;
+  nextCtx.save();
+  nextCtx.translate((120 - w) / 2, (90 - h) / 2);
+  shape.forEach((row, r) => row.forEach((v, c) => { if (v) drawCell(nextCtx, c, r, nextPiece.color, s); }));
+  nextCtx.restore();
+}
+
+function updateStats() {
+  document.getElementById("score").textContent = score;
+  document.getElementById("lines").textContent = lines;
+  document.getElementById("level").textContent = level;
+}
+
+/* =====================================================================
+   GAME LOOP
+   ===================================================================== */
+function loop(time) {
+  const dt = time - lastTime;
+  lastTime = time;
+  if (state === "playing") {
+    dropTimer += dt;
+    if (dropTimer >= dropInterval()) softDropByGravity();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function softDropByGravity() {
+  dropTimer = 0;
+  if (!collides(piece.shape, piece.x, piece.y + 1)) piece.y++;
+  else lockPiece();
+}
+
+/* =====================================================================
+   CONTROLS - the Arduino and the keyboard both use handleCommand()
+   ===================================================================== */
+function handleCommand(cmd) {
+  switch (cmd) {
+    case "L":   move(-1); break;
+    case "R":   move(1); break;
+    case "D":   softDrop(); break;
+    case "CW":  rotate(1); break;
+    case "CCW": rotate(-1); break;
+    case "P":
+      if (state === "playing") hardDrop();
+      else startGame();
+      break;
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  const keys = {
+    ArrowLeft: "L", ArrowRight: "R", ArrowDown: "D",
+    ArrowUp: "CW", x: "CW", z: "CCW", " ": "P"
+  };
+  if (e.key === "Enter") { if (state !== "playing") startGame(); e.preventDefault(); return; }
+  if (keys[e.key]) { handleCommand(keys[e.key]); e.preventDefault(); }
+});
+
+document.getElementById("startBtn").onclick = () => { startGame(); boardCanvas.focus(); };
+
+/* =====================================================================
+   ARDUINO CONNECTION (Web Serial - talks over the USB cable)
+   Works in Chrome or Edge on a computer.
+   ===================================================================== */
+let port = null;
+let writer = null;
+const statusEl = document.getElementById("connStatus");
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "";
+}
+
+document.getElementById("connectBtn").onclick = async () => {
+  if (!("serial" in navigator)) {
+    setStatus("This browser can't talk to USB. Use Chrome or Edge on a computer.", "err");
+    return;
+  }
   try {
-    const res = await fetch(BASE + LAMP_FEED + "/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-AIO-Key": IO_KEY },
-      body: JSON.stringify({ value: value })
-    });
-    if (res.status === 429) { status.textContent = "Slow down! Rate limit hit (30 per minute)."; return; }
-    if (!res.ok) { status.textContent = "Adafruit IO replied " + res.status; return; }
-    status.textContent = "Sent '" + value + "' at " + new Date().toLocaleTimeString();
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+
+    const encoder = new TextEncoderStream();
+    encoder.readable.pipeTo(port.writable);
+    writer = encoder.writable.getWriter();
+
+    setStatus("Arduino connected ✓", "ok");
+    document.getElementById("connectBtn").disabled = true;
+    readFromArduino();
   } catch (err) {
-    status.textContent = "Could not send: " + err.message;
+    if (err.name === "NotFoundError") setStatus("No port picked.", "err");
+    else if (err.name === "InvalidStateError" || /open/i.test(err.message))
+      setStatus("Port busy. Close the Arduino IDE's Serial Monitor and try again.", "err");
+    else setStatus("Could not connect: " + err.message, "err");
   }
+};
+
+async function readFromArduino() {
+  const decoder = new TextDecoderStream();
+  port.readable.pipeTo(decoder.writable).catch(() => {});
+  const reader = decoder.readable.getReader();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let i;
+      while ((i = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, i).trim();
+        buffer = buffer.slice(i + 1);
+        if (!line) continue;
+        document.getElementById("lastInput").textContent = "Last from Arduino: " + line;
+        if (line === "READY") setStatus("Arduino connected ✓ (ready)", "ok");
+        else handleCommand(line);
+      }
+    }
+  } catch (err) {
+    setStatus("Arduino disconnected. Plug it back in and click Connect.", "err");
+  }
+  writer = null;
+  document.getElementById("connectBtn").disabled = false;
 }
 
-/* =====================================================================
-   THE CONVERSATION - reply to the doorbell.
-   Sends "letin" on the lamp feed; the Arduino turns green and chimes.
-   ===================================================================== */
-async function letThemIn() {
-  await sendLamp("letin");
-  document.getElementById("letInBtn").style.display = "none";
-  document.getElementById("doorReply").textContent = "You let them in at " + new Date().toLocaleTimeString() + ".";
+async function sendToArduino(text) {
+  if (!writer) return;
+  try { await writer.write(text + "\n"); } catch (e) {}
 }
 
-/* =====================================================================
-   RGB SLIDERS - moving a slider only changes the preview box.
-   The color is sent to the Arduino when you click "Send this color".
-   (Sending on every slider wiggle would hit the 30-per-minute limit.)
-   ===================================================================== */
-const rSlider = document.getElementById("r");
-const gSlider = document.getElementById("g");
-const bSlider = document.getElementById("b");
-
-function updateSwatch() {
-  const r = rSlider.value, g = gSlider.value, b = bSlider.value;
-  document.getElementById("rVal").textContent = r;
-  document.getElementById("gVal").textContent = g;
-  document.getElementById("bVal").textContent = b;
-  document.getElementById("swatch").style.background = `rgb(${r},${g},${b})`;
-}
-rSlider.oninput = updateSwatch;
-gSlider.oninput = updateSwatch;
-bSlider.oninput = updateSwatch;
-updateSwatch();
-
-function sendCustomColor() {
-  // Sends something like "255,0,128" - the Arduino splits it into r, g, b.
-  sendLamp(rSlider.value + "," + gSlider.value + "," + bSlider.value);
+if ("serial" in navigator) {
+  navigator.serial.addEventListener("disconnect", () => {
+    setStatus("Arduino unplugged. Plug it back in and click Connect.", "err");
+    writer = null;
+    document.getElementById("connectBtn").disabled = false;
+  });
 }
 
 /* ---------- start ---------- */
-checkDoorbell();
+draw();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
 setInterval(checkDoorbell, POLL_MS);
 </script>
 </body>
